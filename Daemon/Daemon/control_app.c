@@ -72,7 +72,7 @@ int startControlApp (const char *daemonName) {
                      getPIDFullFilename (), strerror(errno));
             return erc;
         case -1:
-            fprintf (stdout, "Couldn't open the file '%s'. %s\n", getPIDFullFilename (), strerror(errno));
+            fprintf (stdout, "Couldn't open the file '%s'. %s.\n", getPIDFullFilename (), strerror(errno));
             fprintf (stdout, "Possibly the '%s' wasn't started\n", getDaemonName ());
             break;
         case 0:
@@ -107,9 +107,11 @@ void restartDaemonManual (const char *daemonName) {
         erc = -1;
         fprintf(stderr, "Unable to create process by fork (%s)\n", strerror(errno));
         break;
-    default:
+    default: {
+        void printCurrentTimeToStdout ();
         fprintf(stdout, "Daemon was started successfully (PID = %d)\n", pid);
         break;
+        }
     }
 }
 
@@ -123,7 +125,7 @@ int mainControlAppLoop () {
     while (isContinue) {
         req.tv_sec  = 0;
         req.tv_nsec = 150000000; //0.15 sec
-        fprintf (stdout, "[a: Send SIG 'isAlive daemon', r: Restart daemon, q: Quit daemon, e: Exit]: ");
+        fprintf (stdout, "[a: Send 'isAlive daemon', r: Restart daemon, q: Quit daemon, e: Exit]: ");
         fscanf (stdin, "%s", str);
 
         switch (str[0]) {
@@ -142,7 +144,8 @@ int mainControlAppLoop () {
                     break;
                 case -1:
                     if (str[0] == 'a' || str[0] == 'q') {
-                        fprintf (stdout, "Couldn't open the file '%s'. %s\n", getPIDFullFilename (), strerror(errno));
+                        fprintf (stdout, "Couldn't open the file '%s'. %s.\n", getPIDFullFilename (), strerror(errno));
+                        fprintf (stdout, "Possibly the '%s' wasn't started\n", getDaemonName ());
                     }
 
                     if (str[0] == 'r') {

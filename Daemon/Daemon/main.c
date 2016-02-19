@@ -24,14 +24,14 @@ int main(int argc, char *argv[])
         if (strcmp (argv[1], "-d") == 0) {
             isControlMode = 0;
         } else {
-            fprintf (stdout, "\nError: Unrecognized parameter %s\n\n", argv[1]);
+            fprintf (stdout, "\nError: Unrecognized parameter %s.\n\n", argv[1]);
             erc = 2;
             return erc;
         }
     }
 
     if (getuid () != 0 && getgid () != 0) {
-        fprintf (stdout, "\nError: Try to launch with root privileges\n\n");
+        fprintf (stdout, "\nError: Not enought privileges. Try to launch as root\n\n");
         erc = 3;
         return erc;
     }
