@@ -17,6 +17,8 @@ pid_t dpid;
 struct sigaction sa;
 const char *daemonInputName;
 
+volatile short isReceivedAliveSignal = FALSE;
+
 int startControlApp (const char *daemonName) {
     int erc = NO_ERROR;
     daemonInputName = daemonName;
@@ -76,7 +78,7 @@ int startControlApp (const char *daemonName) {
             fprintf (stdout, "Possibly the '%s' wasn't started\n", getDaemonName ());
             break;
         case 0:
-            fprintf (stdout, "'%s' is executing with PID = %d\n", getDaemonName (), dpid);
+            fprintf (stdout, "'%s' executing with PID = %d\n", getDaemonName (), dpid);
             break;
         default:
             fprintf (stdout, "Unknown error code = %d returned by readPIDFromFile\n", erc);
@@ -85,7 +87,7 @@ int startControlApp (const char *daemonName) {
         }
     }
 
-    erc = mainControlAppLoop ();
+    erc = mainControlAppLoop (erc == 0);
 
     return erc;
 }
@@ -108,25 +110,31 @@ void restartDaemonManual (const char *daemonName) {
         fprintf(stderr, "Unable to create process by fork (%s)\n", strerror(errno));
         break;
     default: {
-        void printCurrentTimeToStdout ();
+        printCurrentTimeToStdout ();
         fprintf(stdout, "Daemon was started successfully (PID = %d)\n", pid);
         break;
         }
     }
 }
 
-int mainControlAppLoop () {
+int mainControlAppLoop (short isExecuteDaemon) {
 
     char str[64];
-    int erc = NO_ERROR, erc2;
-    short isContinue = TRUE;
+    int erc = NO_ERROR, erc2, restartDurationInSec = 2, waitDurationBeforeRestartInSec = 5;
+    short isContinue = TRUE, isRestartDaemon = FALSE;
     struct timespec req, rem;
 
     while (isContinue) {
         req.tv_sec  = 0;
-        req.tv_nsec = 150000000; //0.15 sec
-        fprintf (stdout, "[a: Send 'isAlive daemon', r: Restart daemon, q: Quit daemon, e: Exit]: ");
-        fscanf (stdin, "%s", str);
+        req.tv_nsec = 200000000; //0.2 sec
+
+        if (!isRestartDaemon && !isExecuteDaemon) {
+            fprintf (stdout, "[a: Check 'isAlive' daemon, r: Restart daemon, q: Quit daemon, e: Exit]: ");
+            fscanf (stdin, "%s", str);
+        } else if (isExecuteDaemon) {
+            isExecuteDaemon = FALSE;
+            str[0] = 'a';
+        }
 
         switch (str[0]) {
             case 'e':
@@ -146,25 +154,61 @@ int mainControlAppLoop () {
                     if (str[0] == 'a' || str[0] == 'q') {
                         fprintf (stdout, "Couldn't open the file '%s'. %s.\n", getPIDFullFilename (), strerror(errno));
                         fprintf (stdout, "Possibly the '%s' wasn't started\n", getDaemonName ());
+
+                        /*if (!isRestartDaemon) { // Restart daemon
+                            fprintf (stdout, "Try to launch the '%s'\n", getDaemonName ());
+                            isRestartDaemon = TRUE;
+                            str[0] = 'r';
+                            req.tv_sec = 0; req.tv_nsec = 0;
+                        } else {
+                            isRestartDaemon = FALSE;
+                            req.tv_sec = 2; req.tv_nsec = 0;
+                        }*/
                     }
 
                     if (str[0] == 'r') {
                         restartDaemonManual (daemonInputName);
+                        if (isRestartDaemon) {req.tv_sec = restartDurationInSec; req.tv_nsec = 0; str[0] = 'a';}
                     }
                     break;
                 case 0:
                     if (str[0] == 'a') {
+                        isReceivedAliveSignal = FALSE;
                         printCurrentTimeToStdout ();
                         fprintf (stdout, "Send isAlive signal to the process (PID = %d)\n", dpid);
                         erc = kill (dpid, SIGINT);
-                        req.tv_sec  = 2;
+                        req.tv_sec  = waitDurationBeforeRestartInSec;
                         req.tv_nsec = 0;
+
+                        while (TRUE) {
+
+                            erc2 = nanosleep (&req, &rem);
+                            if (erc2 == -1) { // Interrupted by signal
+                                if (isReceivedAliveSignal) break;
+                                if (rem.tv_sec > 0 || rem.tv_nsec > 0) {
+                                    req.tv_sec  = rem.tv_sec;
+                                    req.tv_nsec = rem.tv_nsec;
+                                    continue;
+                                }
+                            }
+                            break;
+                        }
+
+                        if (!isReceivedAliveSignal && !isRestartDaemon) { // Restart daemon
+                            isRestartDaemon = TRUE;
+                            str[0] = 'r';
+                            req.tv_sec = 0; req.tv_nsec = 0;
+                        } else {
+                            isRestartDaemon = FALSE;
+                            req.tv_sec = 2; req.tv_nsec = 0;
+                        }
                     }
 
                     if (str[0] == 'r') {
                         printCurrentTimeToStdout ();
                         fprintf (stdout, "Send Restart signal to the process (PID = %d)\n", dpid);
                         erc = kill (dpid, SIGHUP);
+                        if (isRestartDaemon) {req.tv_sec = restartDurationInSec; req.tv_nsec = 0; str[0] = 'a';}
                     }
 
                     if (str[0] == 'q') {
@@ -179,7 +223,7 @@ int mainControlAppLoop () {
                 break;
         }
 
-        while (TRUE) {
+        while (TRUE && (req.tv_sec > 0 || req.tv_nsec > 0)) {
             erc2 = nanosleep (&req, &rem);
             if (erc2 == -1) { // Interrupted by signal
                 if (rem.tv_sec > 0 || rem.tv_nsec > 0) {
@@ -211,6 +255,7 @@ void signalControlAppHandler (int sig, siginfo_t *siginfo, void *data) {
 
     switch (sig) {
     case SIGUSR2:
+        isReceivedAliveSignal = TRUE;
         printCurrentTimeToStdout ();
         fprintf (stdout, "Daemon executing now (PID = %d)\n", spid);
         break;

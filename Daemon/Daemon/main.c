@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 
         return erc;
     } else {
-        fprintf (stdout, "\nStart control application\n\n");
+        fprintf (stdout, "\nStart control application\n");
         erc = startControlApp (daemonName);
     }
     return erc;

@@ -7,7 +7,7 @@
 //int extractDaemonFilename (const char *path, const char **fname);
 //int deletePIDFile (pid_t pid);
 
-int mainControlAppLoop ();
+int mainControlAppLoop (short isExecuteDaemon);
 
 int configureSignalControlAppHandlers ();
 

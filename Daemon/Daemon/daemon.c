@@ -336,7 +336,8 @@ int configureSignalHandlers () {
     sigprocmask (SIG_BLOCK, &sigset, 0); //Block signals
 
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags     = SA_SIGINFO; // If cleared and the signal is caught, the signal-catching function will be entered as [void func(int signo);]
+    sa.sa_mask  = sigset;
+    sa.sa_flags = SA_SIGINFO; // If cleared and the signal is caught, the signal-catching function will be entered as [void func(int signo);]
 
     //sa.sa_handler   = signalHandler;
     sa.sa_sigaction = signalCatching;
